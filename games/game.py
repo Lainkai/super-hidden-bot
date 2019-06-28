@@ -40,10 +40,6 @@ class Game():
     
     async def end_game(self):
         self.ended = True
-        try:
-            self.client.active_games.pop(self.ctx.channel)
-        except KeyError:
-            pass
         print("Game: {0} Ended".format(self.name))
 
     async def game_action(self, args, **kwargs):

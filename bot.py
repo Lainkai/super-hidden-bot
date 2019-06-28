@@ -20,17 +20,48 @@ gLogger.setLevel(logging.DEBUG)
 
 class GaiaBot(Bot):
 
+    class ActiveGameWorker():
+        
+        def __init__(self, bot):
+            self.bot = bot
+            self.enabled = True
+            self.bot.loop.create_task(self.monitor())
+
+        def disable(self):
+            self.enabled = False
+        
+        def enable(self):
+            self.enabled = True
+        
+        async def monitor(self):
+            await self.bot.wait_until_ready()
+            while self.bot.active:
+                if self.enabled:
+                    ended_games = []
+                    for g in self.bot.active_games:
+                        if self.bot.active_games[g].ended:
+                            ended_games.append(g)
+                    for g in ended_games:
+                        self.bot.active_games.pop(g)
+                await asyncio.sleep(0.125)
+
     def __init__(self):
         Bot.__init__(self,'G#',description="Ree")
         self.active_games = {}
+        self.active = True
+        self.game_worker = self.ActiveGameWorker(self)
 
     async def end_all_games(self):
-        while len(self.active_games) > 0:
-            try:
-                for g in self.active_games:
-                    await self.active_games[g].end_game()
-            except RuntimeError:
-                pass
+
+        self.game_worker.disable()
+
+        await self.change_presence(status=discord.Status.dnd)
+
+        for g in self.active_games:
+            await self.active_games[g].end_game()
+        
+        self.game_worker.enable()
+
 
 gaiaBot = GaiaBot()
 
@@ -156,15 +187,17 @@ async def playGame(ctx, *gameid):
             if not game.enabled:
                 raise ModuleNotFoundError
 
-            gaiaBot.active_games[ctx.channel] = game
+            if gaiaBot.game_worker.enabled:
+                gaiaBot.active_games[ctx.channel] = game
 
-            gLogger.debug("Loading Game #{0}, {1}".format(game_id,game.name))
-            await ctx.channel.send("Loading {0}".format(game.name))
+                gLogger.debug("Loading Game #{0}, {1}".format(game_id,game.name))
+                await ctx.channel.send("Loading {0}".format(game.name))
 
-            loadTask = gaiaBot.loop.create_task(game.ready())
-            await game.addPlayer(ctx.message.author)
+                loadTask = gaiaBot.loop.create_task(game.ready())
+                await game.addPlayer(ctx.message.author)
 
-            return
+            else:
+                await ctx.channel.send("I am sorry, but I am in the process of shutting down.")
 
         except ModuleNotFoundError:
             gLogger.warning("Game not found: {0}".format(game_id))
