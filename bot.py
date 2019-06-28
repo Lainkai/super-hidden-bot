@@ -21,23 +21,26 @@ gLogger.setLevel(logging.DEBUG)
 class GaiaBot(Bot):
 
     def __init__(self):
-        Bot.__init__(self,'#',description="Ree")
+        Bot.__init__(self,'G#',description="Ree")
         self.active_games = {}
 
-    def end_all_games(self):
-        for g in self.active_games:
-            self.active_games[g].end_game()
-        
+    async def end_all_games(self):
+        while len(self.active_games) > 0:
+            try:
+                for g in self.active_games:
+                    await self.active_games[g].end_game()
+            except RuntimeError:
+                pass
 
 gaiaBot = GaiaBot()
 
-def get_game(module_name):
+def get_game(module_name, ctx):
     parts = ("games.{0}.{0}".format(module_name)).split('.')
     module = ".".join(parts[:-1])
     m = __import__( module )
     for comp in parts[1:]:
         m = getattr(m, comp)
-    return m()
+    return m(gaiaBot,ctx)
 
 async def bot_owner(ctx):
     return ctx.author.id == 352258945995243525
@@ -68,59 +71,112 @@ async def on_ready():
 @commands.check(bot_owner)
 async def exit(ctx):
     await ctx.channel.send("Bye-Bye :wave::wave:")
-    gaiaBot.end_all_games()
+    await gaiaBot.end_all_games()
     await gaiaBot.logout()
 
 @gaiaBot.command(name="play")
-async def playGame(ctx, game_id:str = None, level_id:str= None):
+async def playGame(ctx, *gameid):
     """
         Starts a game given the correct id. If no correct id is found, a library of the games will be sent.
     """
+    game_id = ""
+
+    for idx, s in enumerate(gameid):
+        if idx == 0:
+            game_id = s
+        else:
+            game_id += " {0}".format(s)
+
     if(game_id):
         if ctx.channel in gaiaBot.active_games:
             await ctx.channel.send("{0} Oops! I am already playing a game with someone else right now. :confused: Please try again later.".format(ctx.message.author.mention), delete_after=10)
             try:
-                ctx.message.delete(delay=10)
+                await ctx.message.delete(delay=10)
             except discord.Forbidden:
-                print("OOFed\n\n")
+                gLogger.warning("No permission to do stuff")
             return None
         try:
             matches = re.findall("[a-z]", game_id.lower())
             game_file = ""
             for m in matches:
                 game_file+=m
-            logging.debug(game_file)
-            game = get_game(game_file)
+            
+            if game_file == "":
+                    matches = re.findall("[0-9]", game_id)
+                    for m in matches:
+                        game_file+=m
+
+                    num = 1
+                    for g in os.listdir('games'):
+                        try:
+                            if not g.split('.',1)[1] == "py":
+                                continue
+                        except IndexError:
+                            continue
+                        if g == 'game.py':
+                            continue
+                        if num == int(game_file):
+                            game_file = g.split('.',1)[0]
+                            game = get_game(game_file,ctx)
+                            if not game.enabled:
+                                game_file = ""
+                                for m in matches:
+                                    game_file+=m
+                                continue
+                            break
+                        num+=1
+            else:
+                game = get_game(game_file,ctx)
+
+            gLogger.debug(game_file)
+            if not game.enabled:
+                raise ModuleNotFoundError
 
             gaiaBot.active_games[ctx.channel] = game
 
-            logging.debug("Loading Game #{0}, {1}".format(game_id,game.name))
+            gLogger.debug("Loading Game #{0}, {1}".format(game_id,game.name))
             await ctx.channel.send("Loading {0}".format(game.name))
 
-            loadTask = gaiaBot.loop.create_task(game.ready(gaiaBot,ctx))
+            loadTask = gaiaBot.loop.create_task(game.ready())
             await game.addPlayer(ctx.message.author)
 
-        except ModuleNotFoundError:
+            return
 
-            logging.warning("Game not found: {0}".format(game_id))
-            await ctx.channel.send("Sorry, but I am not familiar with the game {0}".format(game_id))
+        except ModuleNotFoundError:
+            gLogger.warning("Game not found: {0}".format(game_id))
+            await ctx.channel.send("Sorry, but I am not familiar with the game {0}. Ask the developer if the game has been disabled".format(game_id))
 
     else:
-        selection = discord.Embed(title="Game Selection", description="Please choose one of the following games.", colour=0xfe4a49)
+        selection = discord.Embed(title="Game Selection", description="Please choose one of the following games.", color=0xfe4a49)
         game_count = 1
         for g in os.listdir('games'):
+            try:
+                if not g.split('.',1)[1] == "py":
+                    continue
+            except IndexError:
+                continue
             g = g.split('.',1)[0]
-            if g == 'game' or g == '__pycache__' or g == "exp":
+            if g == 'game':
                 continue
             try:
-                game = get_game(g)
-                logger.info("Getting {0}".format(game.name))
-                selection.add_field(name="{0}. {1}".format(game_count,game.name), value=game.desc)
+                game = get_game(g,ctx)
+                if not game.enabled:
+                    continue
+                gLogger.info("Getting {0}".format(game.name))
+                selection.add_field(name="{0}. {1}".format(game_count,game.name), value=game.desc,inline=False)
                 game_count+=1
             except ModuleNotFoundError:
                 pass
 
         await ctx.channel.send(content=ctx.author.mention,embed=selection)
+
+@gaiaBot.command(name="start")
+@commands.check(end_game_worthy)
+async def start_game(ctx):
+    try:
+        await gaiaBot.active_games[ctx.channel].start_game()
+    except KeyError:
+        await ctx.channel.send("Start what game?")
 
 @gaiaBot.command(name="end-game")
 @commands.check(end_game_worthy)
@@ -131,11 +187,22 @@ async def endGame(ctx):
     except KeyError:
         await ctx.channel.send("No game to be seen.")
 
+@gaiaBot.command(name="join")
+async def addPlayer(ctx):
+    try:
+        await gaiaBot.active_games[ctx.channel].addPlayer(ctx.author)
+    except KeyError:
+        await ctx.channel.send("No game to add you to!")
 
 @gaiaBot.command(name="do")
 async def playGame(ctx, *argv):
-
-    pass
+    try:
+        args = list(argv)
+        comm = args.pop(0)
+        args = tuple(args)
+        await gaiaBot.active_games[ctx.channel].game_action(args,command=comm,sender=ctx.author)
+    except KeyError:
+        await ctx.channel.send("Do what lol.")
         
 
 gaiaBot.run(open("token.txt").read())
