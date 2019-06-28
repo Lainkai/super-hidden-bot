@@ -61,6 +61,30 @@ async def end_game_worthy(ctx):
     else:
         return False
 
+async def show_library(ctx):
+    selection = discord.Embed(title="Game Selection", description="Please choose one of the following games.", color=0xfe4a49)
+    game_count = 1
+    for g in os.listdir('games'):
+        try:
+            if not g.split('.',1)[1] == "py":
+                continue
+        except IndexError:
+            continue
+        g = g.split('.',1)[0]
+        if g == 'game':
+            continue
+        try:
+            game = get_game(g,ctx)
+            if not game.enabled:
+                continue
+            gLogger.info("Getting {0}".format(game.name))
+            selection.add_field(name="{0}. {1}".format(game_count,game.name), value=game.desc,inline=False)
+            game_count+=1
+        except ModuleNotFoundError:
+            pass
+
+    await ctx.channel.send(content=ctx.author.mention,embed=selection)
+
 
 @gaiaBot.event
 async def on_ready():
@@ -145,30 +169,10 @@ async def playGame(ctx, *gameid):
         except ModuleNotFoundError:
             gLogger.warning("Game not found: {0}".format(game_id))
             await ctx.channel.send("Sorry, but I am not familiar with the game {0}. Ask the developer if the game has been disabled".format(game_id))
+            await show_library(ctx)
 
     else:
-        selection = discord.Embed(title="Game Selection", description="Please choose one of the following games.", color=0xfe4a49)
-        game_count = 1
-        for g in os.listdir('games'):
-            try:
-                if not g.split('.',1)[1] == "py":
-                    continue
-            except IndexError:
-                continue
-            g = g.split('.',1)[0]
-            if g == 'game':
-                continue
-            try:
-                game = get_game(g,ctx)
-                if not game.enabled:
-                    continue
-                gLogger.info("Getting {0}".format(game.name))
-                selection.add_field(name="{0}. {1}".format(game_count,game.name), value=game.desc,inline=False)
-                game_count+=1
-            except ModuleNotFoundError:
-                pass
-
-        await ctx.channel.send(content=ctx.author.mention,embed=selection)
+        await show_library(ctx)
 
 @gaiaBot.command(name="start")
 @commands.check(end_game_worthy)
