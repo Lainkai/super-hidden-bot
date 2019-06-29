@@ -109,7 +109,7 @@ class Game():
             await self.ctx.channel.send("Oh well. . . I guess not enough people want to play. . . :cry:")
             await self.end_game()
 
-        prefix = await self.client.get_prefix(self.ctx.message)
+        prefix = self.ctx.prefix
         if not self.ended:
             await self.ctx.channel.send("Ready! Type {0}start".format(prefix))
 

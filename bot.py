@@ -45,8 +45,8 @@ class GaiaBot(Bot):
                         self.bot.active_games.pop(g)
                 await asyncio.sleep(0.125)
 
-    def __init__(self):
-        Bot.__init__(self,'G#',description="Ree")
+    def __init__(self, prefix):
+        Bot.__init__(self,prefix, description="Game Action Interactivity Accumulator. Entertain your audience with games.")
         self.active_games = {}
         self.active = True
         self.game_worker = self.ActiveGameWorker(self)
@@ -57,13 +57,18 @@ class GaiaBot(Bot):
 
         await self.change_presence(status=discord.Status.dnd)
 
+        await asyncio.sleep(5)
+
         for g in self.active_games:
             await self.active_games[g].end_game()
+            embed = discord.Embed()
+            embed.set_image(url="https://media.giphy.com/media/ki6MFFoare6CQ/giphy.gif")
+            await g.send("Sorry, but I need to go! Bye-Bye :wave::wave:",embed=embed)
         
         self.game_worker.enable()
 
 
-gaiaBot = GaiaBot()
+gaiaBot = GaiaBot(("g#","G#"))
 
 def get_game(module_name, ctx):
     parts = ("games.{0}.{0}".format(module_name)).split('.')
@@ -77,20 +82,20 @@ async def bot_owner(ctx):
     return ctx.author.id == 352258945995243525
 
 async def end_game_worthy(ctx):
-    try:
+    if ctx.channel in gaiaBot.active_games:
         game_starter = gaiaBot.active_games[ctx.channel].ctx.message.author
         if ctx.message.author == game_starter:
             return True
-        elif ctx.message.author.top_role() > game_starter.top_role():
+        if isinstance(ctx.channel, discord.DMChannel) or isinstance(ctx.channel, discord.GroupChannel):
             return True
         else:
-            return False
-    except KeyError:
-        return True
-    if isinstance(ctx.channel, discord.DMChannel) or isinstance(ctx.channel, discord.GroupChannel):
-        return True
+            if ctx.message.author.top_role() > game_starter.top_role():
+                return True
+            else:
+                return False
     else:
-        return False
+        return True
+    
 
 async def show_library(ctx):
     selection = discord.Embed(title="Game Selection", description="Please choose one of the following games.", color=0xfe4a49)
@@ -120,7 +125,7 @@ async def show_library(ctx):
 @gaiaBot.event
 async def on_ready():
     print("Ready!")
-    await gaiaBot.change_presence(status=discord.Status.idle,activity=discord.Activity(name="for when you get a life.",type=discord.ActivityType.watching))
+    await gaiaBot.change_presence(status=discord.Status.idle,activity=discord.Activity(name="for a new game to be released!",type=discord.ActivityType.watching))
 
 @gaiaBot.command(name='exit')
 @commands.check(bot_owner)
@@ -210,35 +215,39 @@ async def playGame(ctx, *gameid):
 @gaiaBot.command(name="start")
 @commands.check(end_game_worthy)
 async def start_game(ctx):
-    try:
+    if ctx.channel in gaiaBot.active_games:
         await gaiaBot.active_games[ctx.channel].start_game()
-    except KeyError:
+    else:
         await ctx.channel.send("Start what game?")
 
 @gaiaBot.command(name="end-game")
 @commands.check(end_game_worthy)
 async def endGame(ctx):
-    try:
+    if ctx.channel in gaiaBot.active_games:
         await gaiaBot.active_games[ctx.channel].end_game()
         await ctx.channel.send("Game SUCCessfully ended.")
-    except KeyError:
+    else:
+        
         await ctx.channel.send("No game to be seen.")
 
 @gaiaBot.command(name="join")
 async def addPlayer(ctx):
-    try:
+    if ctx.channel in gaiaBot.active_games:
         await gaiaBot.active_games[ctx.channel].addPlayer(ctx.author)
-    except KeyError:
+    else:
+        
         await ctx.channel.send("No game to add you to!")
 
 @gaiaBot.command(name="do")
 async def playGame(ctx, *argv):
-    try:
+    """The do command is used for commands inside a game. Each game has a help command, `do help` to help you play the game."""
+    if ctx.channel in gaiaBot.active_games:
         args = list(argv)
         comm = args.pop(0)
         args = tuple(args)
         await gaiaBot.active_games[ctx.channel].game_action(args,command=comm,sender=ctx.author)
-    except KeyError:
+    else:
+        
         await ctx.channel.send("Do what lol.")
         
 

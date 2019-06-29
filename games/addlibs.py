@@ -14,12 +14,13 @@ class addlibs(Game):
 
         def __init__(self, client:discord.Client, ctx):
             rules = {
-                "You are assigned by your name next to the part of speech":"For example, \{1-Bak3dChips\}",
+                "You are assigned by your name next to the part of speech":"For example, {{1-{0}}}".format(ctx.author.display_name),
                 "1s are Nouns":"Wherever you are assigned a \{1\}, make it a noun, like person.",
                 "2s are Adjectives":"Wherever you are assigned a \{2\}, make it an adjective, like red.",
                 "3s are Verbs":"Wherever you are assigned a \{3\}, make it an verb, like run, ran, running, etc.",
                 "4s are Pronouns":"Wherever you are assigned a \{4\}, make it an pronoun, like he/she.",
-                "5s are Numbers":"Wherever you are assigned a \{5\}, make it a number, like one or 1."
+                "5s are Numbers":"Wherever you are assigned a \{5\}, make it a number, like one or 1.",
+                "Filling Your Location":"Use the commmand '{0}do fill `x`' to fill in your first assigned location. Remember, spaces lead to different locations".format(ctx.prefix)
             }
             Game.__init__(self, client, ctx, "Add-Libs", "Add your own text to a story!",rules, 1, 4, True)
 
@@ -50,7 +51,7 @@ class addlibs(Game):
             self.game = assigned_game
 
         async def help(self, args, kwargs):
-            await self.ctx.channel.send("Use `do fill ` and then your responses.")
+            await self.ctx.channel.send("Use `{0}do fill ` and then your responses, i.e. `{0}do fill {0}`".format(self.ctx.prefix,self.ctx.author))
             
         async def fill(self, args, kwargs):
             user = kwargs["sender"]
